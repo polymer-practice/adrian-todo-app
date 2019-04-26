@@ -1,0 +1,233 @@
+<link rel="import" href="../../bower_components/polymer/polymer-element.html">
+<link rel="import" href="../../bower_components/form-task/form-task.html">
+<link rel="import" href="../../bower_components/task-list/task-list.html">
+<link rel="import" href="../../bower_components/task-repository/task-repository.html">
+
+<dom-module id="todo-app-app">
+  <template>
+    <style>
+      :host {
+        display: block;
+        --primary-color: #3f51b5;
+        --secoundary-color:  #ffffff;
+        --width-element-task-element: 400px;
+        font-size: 14px;
+        font-weight: 300;
+      }
+
+      .display {
+        display: flex;
+        justify-content: flex-start;
+        flex-direction: column;
+      }
+
+      .button-set {
+        display: flex;
+        justify-content: flex-start;
+        flex-direction: column;
+      }
+
+      .go {
+        display: flex;
+        justify-content: space-around;
+        align-content: center;
+      }
+
+      .action {
+        height: 30px;
+        width: 70px;
+        border-radius: 4px
+      }
+
+      .btn {
+        background-color: var(--primary-color);
+        color: var(--secoundary-color);
+      }
+
+      .menu {
+        margin-left: auto;
+        margin-right: auto;
+        border: solid 3px var(--primary-color);
+      }
+
+      @media(min-width: 600px) {
+        .button-set {
+          display: flex;
+          flex-direction: row;
+          justify-content: center;
+          align-items: center;
+        }
+
+        .btn {
+          margin: 0px 5px;
+        }
+      }
+
+    </style>
+    <div class="app">
+      <div class="display">
+        <task-repository id="repo" offset="[[offset]]" limit="[[limit]]"></task-repository>
+        <form-task on-form-task-submit="_addNewTask"></form-task>
+        <task-list
+        task-list="[[pageTask]]"
+        on-pending="_setPending"
+        on-done="_setDone"
+        on-cancel="_setCancel"
+        ></task-list>
+      </div>
+      <div class="button-set">
+        <div class="go back">
+          <button type="button" class="action btn" on-click="_goFirstPage">First</button>
+          <button type="button" class="action btn" on-click="_goPrevPage">Prev</button>
+        </div>
+        <select class="action menu" value="{{limit::change}}">
+          <option value="5" selected>5</option>
+          <option value="10">10</option>
+          <option value="15">15</option>
+        </select>
+        <div class="go forward">
+          <button type="button" class="action btn" on-click="_goNextPage">Next</button>
+          <button type="button" class="action btn" on-click="_goLastPage">Last</button>
+        </div>
+      </div>
+    </div>  
+  </template>
+
+  <script>
+    class TodoAppApp extends Polymer.Element {
+      static get is() { return 'todo-app-app'; }
+      static get properties() {
+        return {
+          page: {
+            type: Number,
+            value: 0
+          },
+          offset: {
+            type: Number,
+            computed: "_updateOffset(page)"
+          },
+          limit: {
+            type: Number,
+            value: 5
+          },
+          pageTask: {
+            type: Array,
+            value: []
+          }
+        };
+      }
+
+      constructor() {
+        super();
+
+        this.total = 0;
+      }
+      connectedCallback() {
+        super.connectedCallback();
+
+        let repo = this.shadowRoot.querySelector('#repo');
+        repo.addEventListener('page-event', this._pageUpdated.bind(this));
+        repo.addEventListener('task-created', this._taskAdded.bind(this));
+        repo.addEventListener('task-updated', this._taskUpdated.bind(this));
+      }
+
+      disconnectedCallback() {
+        super.disconnectedCallback();
+
+        let repo = this.shadowRoot.querySelector('#repo');
+        repo.removeEventListener('page-event', this._pageUpdated);
+        repo.removeEventListener('task-created', this._taskAdded);
+        repo.removeEventListener('task-updated', this._taskUpdated);
+      }
+
+      _pageUpdated(event) {
+        console.log('Page updated: ', event.detail);
+        this.limit = event.detail.limit;
+        this.page = Math.ceil(event.detail.offset/this.limit);
+        this.total = event.detail.total;
+
+        this.set('pageTask', event.detail.page);
+
+      }
+
+      _addNewTask(event) {
+        let repo = this.shadowRoot.querySelector('#repo');
+
+        repo.newTask = {
+          key: this.total + 1,
+          title: event.detail.inputValue,
+          canceled: false,
+          done: false
+        }
+      }
+
+      _taskAdded() {
+        let repo
+        if (this.page === 0) {
+          repo = this.shadowRoot.querySelector('#repo');
+          repo._getPage(this.offset, this.limit);
+        } else {
+          this.page = 0;
+        }
+      }
+
+      _taskUpdated() {
+        let repo = this.shadowRoot.querySelector('#repo');
+        repo._getPage(this.offset, this.limit);
+      }
+
+      _updateOffset(page) {
+        return page * this.limit;
+      }
+
+      _goFirstPage() {
+        this.page = 0;
+      }
+
+      _goPrevPage() {
+        if (this.page > 0) {
+          this.page--;
+        }
+      }
+
+      _goNextPage() {
+        let lastPage = Math.ceil(this.total/this.limit) - 1;
+
+        if (this.page < lastPage) {
+          this.page++;
+        }
+      }
+
+      _goLastPage() {
+        let lastPage = Math.ceil(this.total/this.limit) - 1;
+        this.page = lastPage;
+      }
+
+      _setPending(event) {
+        let task = this.pageTask.filter(task => task.key === event.detail.key)[0];
+        let repo = this.$.repo;
+        task.canceled = false;
+        task.done = false;
+        repo.upDateTask = Object.assign({}, {...task});
+      }
+
+      _setDone(event) {
+        let task = this.pageTask.filter(task => task.key === event.detail.key)[0];
+        let repo = this.shadowRoot.querySelector('#repo');
+        task.canceled = false;
+        task.done = true;
+        repo.upDateTask = Object.assign({}, {...task});
+      }
+
+      _setCancel(event) {
+        let task = this.pageTask.filter(task => task.key === event.detail.key)[0];
+        let repo = this.shadowRoot.querySelector('#repo');
+        task.canceled = true;
+        task.done = false;
+        repo.upDateTask = Object.assign({}, {...task});
+      }
+    }
+
+    window.customElements.define(TodoAppApp.is, TodoAppApp);
+  </script>
+</dom-module>
